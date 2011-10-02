@@ -1,0 +1,153 @@
+Platform ID: 0
+Device ID: 0
+Kernel Path: ../src/fit_lasso2.c
+I am rank 1 and have 1000 observations with 2000 total SNPs, 0 offset, 6 tasks, 2 covariates, 4 SNPs, 250 vec length
+Allocated a char matrix of dimension: 1000
+Received genotypes of 4 total rows and veclen 250.
+Packing genotypes into container.
+Packed genotype stride is 64
+Total packed genolen is 256
+Zeroed beta
+Zeroed score
+Subset sample size is 1000 and base LL: -693.147
+Loading means/SD from file
+Done init slave greedy
+Current LL is -693.147
+Assigning index 0 with 0
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 2 of delta beta -0.0976409 and deltaLL 1.2127 with means/sd: 0.021/0.143384
+Host announced best delta beta of 0.141776 for index -1 and full model index 7 and mean/sd 0.005,0.0705337
+Current LL is -690.304
+Assigning index -1 with 0.141776
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 4 of delta beta 0.0966222 and deltaLL 1.19199 with means/sd: 0.016/0.125475
+Host announced best delta beta of 0.127235 for index -1 and full model index 9 and mean/sd 0.004,0.0631189
+Current LL is -688.016
+Assigning index -1 with 0.127235
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 2 of delta beta -0.0956306 and deltaLL 1.16434 with means/sd: 0.021/0.143384
+Host announced best delta beta of -0.0956306 for index 2 and full model index 2 and mean/sd 0.021,0.143384
+Current LL is -686.852
+Assigning index 2 with -0.0956306
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 3 of delta beta 0.0983265 and deltaLL 1.23063 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0.0983265 for index 3 and full model index 3 and mean/sd 0.008,0.0890842
+Current LL is -685.621
+Assigning index 3 with 0.0983265
+
+Elapsed time in seconds: 0.01
+Notifying host of Best index: 4 of delta beta 0.0876099 and deltaLL 0.944493 with means/sd: 0.016/0.125475
+Host announced best delta beta of 0.0876099 for index 4 and full model index 4 and mean/sd 0.016,0.125475
+Current LL is -684.677
+Assigning index 4 with 0.0876099
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 5 of delta beta 0.0699927 and deltaLL 0.61808 with means/sd: 0.012/0.108885
+Host announced best delta beta of 0.0699927 for index 5 and full model index 5 and mean/sd 0.012,0.108885
+Current LL is -684.059
+Assigning index 5 with 0.0699927
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 3 of delta beta 0.00995872 and deltaLL 0.00992183 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0.0792642 for index -1 and full model index 7 and mean/sd 0.005,0.0705337
+Current LL is -683.64
+Assigning index -1 with 0.0792642
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 1 of delta beta -0.00973242 and deltaLL 0.0116576 with means/sd: 0.0017515/0.00733787
+Host announced best delta beta of 0.0694232 for index -1 and full model index 9 and mean/sd 0.004,0.0631189
+Current LL is -683.354
+Assigning index -1 with 0.0694232
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 1 of delta beta -0.0108521 and deltaLL 0.0145012 with means/sd: 0.0017515/0.00733787
+Host announced best delta beta of 0.067043 for index -1 and full model index 7 and mean/sd 0.005,0.0705337
+Current LL is -683.236
+Assigning index -1 with 0.067043
+
+Elapsed time in seconds: 0.01
+Notifying host of Best index: 1 of delta beta -0.0112604 and deltaLL 0.0156448 with means/sd: 0.0017515/0.00733787
+Host announced best delta beta of 0.0576647 for index -1 and full model index 9 and mean/sd 0.004,0.0631189
+Current LL is -683.159
+Assigning index -1 with 0.0576647
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 1 of delta beta -0.01165 and deltaLL 0.0166561 with means/sd: 0.0017515/0.00733787
+Host announced best delta beta of 0.0481077 for index -1 and full model index 7 and mean/sd 0.005,0.0705337
+Current LL is -683.134
+Assigning index -1 with 0.0481077
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 1 of delta beta -0.0117963 and deltaLL 0.0170958 with means/sd: 0.0017515/0.00733787
+Host announced best delta beta of -0.0117963 for index 1 and full model index 1 and mean/sd 0.0017515,0.00733787
+Current LL is -683.117
+Assigning index 1 with -0.0117963
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 3 of delta beta 0.0096654 and deltaLL 0.00941093 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0.0393246 for index -1 and full model index 9 and mean/sd 0.004,0.0631189
+Current LL is -683.101
+Assigning index -1 with 0.0393246
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 3 of delta beta 0.00961437 and deltaLL 0.00931459 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0.00961437 for index 3 and full model index 3 and mean/sd 0.008,0.0890842
+Current LL is -683.092
+Assigning index 3 with 0.00961437
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 2 of delta beta -0.00904709 and deltaLL 0.00909652 with means/sd: 0.021/0.143384
+Host announced best delta beta of -0.00904709 for index 2 and full model index 2 and mean/sd 0.021,0.143384
+Current LL is -683.083
+Assigning index 2 with -0.00904709
+
+Elapsed time in seconds: 0.01
+Notifying host of Best index: 5 of delta beta 0.0027338 and deltaLL 0.000843228 with means/sd: 0.012/0.108885
+Host announced best delta beta of -0.00640669 for index -1 and full model index 8 and mean/sd 0.027,0.16814
+Current LL is -683.078
+Assigning index -1 with -0.00640669
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 5 of delta beta 0.00261945 and deltaLL 0.000766597 with means/sd: 0.012/0.108885
+Host announced best delta beta of 0.0182284 for index -1 and full model index 7 and mean/sd 0.005,0.0705337
+Current LL is -683.076
+Assigning index -1 with 0.0182284
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 5 of delta beta 0.00260999 and deltaLL 0.000789883 with means/sd: 0.012/0.108885
+Host announced best delta beta of 0.0139943 for index -1 and full model index 9 and mean/sd 0.004,0.0631189
+Current LL is -683.075
+Assigning index -1 with 0.0139943
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 5 of delta beta 0.00260348 and deltaLL 0.000758771 with means/sd: 0.012/0.108885
+Host announced best delta beta of 0.00260348 for index 5 and full model index 5 and mean/sd 0.012,0.108885
+Current LL is -683.074
+Assigning index 5 with 0.00260348
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 4 of delta beta -0.00227948 and deltaLL 0.000565955 with means/sd: 0.016/0.125475
+Host announced best delta beta of -0.00227948 for index 4 and full model index 4 and mean/sd 0.016,0.125475
+Current LL is -683.074
+Assigning index 4 with -0.00227948
+
+Elapsed time in seconds: 0.01
+Notifying host of Best index: 3 of delta beta 0.000882738 and deltaLL 9.30442e-05 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0.0014311 for index -1 and full model index 6 and mean/sd 0.002,0.0446766
+Current LL is -683.073
+Assigning index -1 with 0.0014311
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 3 of delta beta 0.00088859 and deltaLL 0.000103001 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0.00088859 for index 3 and full model index 3 and mean/sd 0.008,0.0890842
+Current LL is -683.073
+Assigning index 3 with 0.00088859
+
+Elapsed time in seconds: 0
+Notifying host of Best index: 0 of delta beta 0 and deltaLL 0 with means/sd: 0.008/0.0890842
+Host announced best delta beta of 0 for index -1 and full model index 6 and mean/sd 0.008,0.0890842
+Loop complete!

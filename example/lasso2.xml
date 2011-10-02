@@ -1,0 +1,32 @@
+<lambda>0</lambda>
+<subsamples>100</subsamples>
+<lasso_path>true</lasso_path>
+<inputdata>
+  <tasklist>tasklist.txt</tasklist>
+  <genofile>pathway.bed.1</genofile>
+  <pedfile>pathway.fam.1</pedfile>
+  <snpfile>pathway.bim.1</snpfile>
+  <covariates>
+    <datafile>covariates.txt</datafile>
+    <selectionfile>covariates.selected</selectionfile>
+  </covariates>
+</inputdata>
+<enable_opencl>false</use_gpu>
+<opencl_settings>
+  <host rank="0">
+    <platform_id>0</platform_id>
+    <device_id>0</device_id>
+    <kernel_path>../src/fit_lasso2.c</kernel_path>
+  </host>
+  <host rank="1">
+    <platform_id>0</platform_id>
+    <device_id>0</device_id>
+    <kernel_path>../src/fit_lasso2.c</kernel_path>
+  </host>
+  <host rank="2">
+    <platform_id>0</platform_id>
+    <device_id>1</device_id>
+    <kernel_path>../src/fit_lasso2.c</kernel_path>
+  </host>
+</opencl_settings>
+
