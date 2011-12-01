@@ -6,12 +6,14 @@
 #endif
 
 //#include<boost/property_tree/exceptions.hpp>
+#include"dimension2.h"
 #include"io.hpp"
 #include"main.hpp"
 #include"analyzer.hpp"
 #include"utility.hpp"
-#include"dimension2.h"
 #include"lasso_mpi2.hpp"
+#include"stability.hpp"
+#include"power.hpp"
 
 //using boost::property_tree::ptree;
 
@@ -120,9 +122,13 @@ int main(int argc,char* argv[]){
       #if defined lasso
       analyzer = new MpiLasso();
       #endif
-    }else if (!selected_analysis.compare("lasso2")){
-      #if defined lasso2
-      analyzer = new MpiLasso2();
+    }else if (!selected_analysis.compare("power")){
+      #if defined power
+      analyzer = new Power();
+      #endif
+    }else if (!selected_analysis.compare("stability")){
+      #if defined stability
+      analyzer = new Stability();
       #endif
     }else if (!selected_analysis.compare("univariate")){
       #if defined univariate

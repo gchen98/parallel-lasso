@@ -35,8 +35,8 @@ ifeq ($(ENV),s3)
   #LINKER = g++
   #CC = mpicxx
   LINKER = mpicxx
-  PREPROC=-Dlasso2=1 -DUSE_GPU
-  OBJS=$(COMMON_OBJS) utility.o slave_lasso2.o master_lasso2.o clsafe.o
+  PREPROC=-Dlasso2=1 -DUSE_GPU -Dpower=1 -Dstability=1
+  OBJS=$(COMMON_OBJS) utility.o power.o stability.o slave_lasso2.o master_lasso2.o clsafe.o
   CFLAGS=$(COMMONCFLAGS) $(BOOST_INC_FLAGS) $(OPENCL_INC_FLAGS) $(MPI_INC_FLAGS)
   LINKFLAGS=$(COMMONLINKFLAGS) $(GSL_LIB_FLAGS) $(OPENCL_LIB_FLAGS) $(MPI_LIB_FLAGS)
 endif
@@ -66,6 +66,12 @@ slave_lasso2.o:  slave_lasso2.cpp lasso_mpi2.hpp analyzer.hpp main.hpp dimension
 
 master_lasso2.o: master_lasso2.cpp lasso_mpi2.hpp analyzer.hpp main.hpp dimension2.h
 	$(CC) $(CFLAGS) $(PREPROC)  -o master_lasso2.o -c $<
+
+power.o:  power.cpp power.hpp analyzer.hpp main.hpp dimension2.h
+	$(CC) $(CFLAGS) $(PREPROC)  -o power.o -c $<
+
+stability.o:  stability.cpp stability.hpp analyzer.hpp main.hpp dimension2.h
+	$(CC) $(CFLAGS) $(PREPROC)  -o stability.o -c $<
 
 utility.o: utility.cpp utility.hpp
 	$(CC) $(CFLAGS) -c $<

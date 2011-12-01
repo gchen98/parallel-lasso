@@ -10,7 +10,8 @@
 #define MPI_FLOAT_ARR 6
 #define MPI_INT_ARR 10
 #define LL_EPSILON .00001
-#define LAMBDA_EPSILON 0.0001
+#define LAMBDA_EPSILON 0.000001
+#define LAMBDA_LARGE 1e10
 //#define SAMPLESIZE 697
 //#define SAMPLESIZE 1000
 //#define SAMPLESIZE 5761
@@ -51,11 +52,11 @@ typedef struct {
 
 typedef struct {
   float lambda;
-//  float lasso_mixture;
-  float l2norm;
+  float lasso_mixture;
+//  float l2norm;
 //  float l1norm;
 //  int a_rank;
-  float a_residual;
+//  float a_residual;
 //  int z_rank;
-  float z_residual;
+//  float z_residual;
 } tuning_param_t;  //read only

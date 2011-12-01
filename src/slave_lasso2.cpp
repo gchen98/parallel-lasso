@@ -20,7 +20,7 @@
 using namespace std;
 typedef unsigned int uint;
 
-void MpiLasso2::init_slave(){
+void MpiLasso2::init_slave_dim(){
   MPI_Type_contiguous(MPI_FLOAT_ARR,MPI_FLOAT,&floatParamArrayType);
   MPI_Type_commit(&floatParamArrayType);
   MPI_Type_contiguous(MPI_INT_ARR,MPI_INT,&intParamArrayType);
@@ -28,7 +28,8 @@ void MpiLasso2::init_slave(){
   int dim[MPI_INT_ARR];
   rc = MPI_Recv(dim,MPI_INT_ARR,MPI_INT,source,TAG_INIT_DIM,MPI_COMM_WORLD,&stat);
   iter = 0;
-  n_subset = n = dim[0];
+  n = dim[0];
+  //n_subset = n = dim[0];
   totalsnps = dim[1];
   genoveclen = dim[2];
   logistic = dim[3];
@@ -97,6 +98,7 @@ void MpiLasso2::init_slave(){
   }
 }
 
+
 float MpiLasso2::getLambda(int index){
    //cerr<<"Entering getLambda for index "<<index<<"\n";
    float dotprod = 0;
@@ -123,50 +125,14 @@ void MpiLasso2::listen(){
       case RPC_GREEDY:
         greedy_slave();
         break;
-      case RPC_INIT:
-        init_slave();
+      case RPC_INIT_DIM:
+        init_slave_dim();
         break;
       case RPC_BETA_UPDATE:
         beta_update_slave();
         break;
       case RPC_INIT_GREEDY:
         init_greedy();
-        break;
-      case RPC_INIT_PARALLEL_GRADIENT:
-        init_parallel_gradient();
-        break;
-      case RPC_INIT_GRADIENT:
-        init_gradient();
-        break;
-      case RPC_FITTED_VALUE:
-        estimate_fitted_value();
-        break;
-      case RPC_FETCH_FITTED_VALUE:
-        rc = MPI_Send(&xbeta,1,MPI_FLOAT,source,TAG_FITTED_VALUE,MPI_COMM_WORLD);
-        break;
-      case RPC_PARALLEL_FITTED_VALUE:
-        estimate_parallel_fitted_value();
-        break;
-      case RPC_NEW_GRADIENT:
-        new_gradient();
-        break;
-      case RPC_PARALLEL_NEW_GRADIENT:
-        parallel_new_gradient();
-        break;
-      case RPC_GRADIENT_SHRINK:
-        gradient_shrink();
-        break;
-      case RPC_STANDARDIZE:
-        compute_mean_sd(1);
-        break;
-      case RPC_UPDATE_ETA:
-        rc = MPI_Recv(&eta,1,MPI_FLOAT,source,TAG_UPDATE_ETA,MPI_COMM_WORLD,&stat);
-        if(settings->use_gpu){
-          #ifdef USE_GPU
-          int err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.eta_mem_obj, CL_TRUE, 0,  sizeof(float), &eta , NULL, NULL);
-          clSafe(err,"CommandQueue::write eta");
-          #endif
-        }
         break;
       case RPC_END:
         cleanup_slave();
@@ -178,9 +144,9 @@ void MpiLasso2::listen(){
   return;
 }
 
-#ifdef USE_GPU
 
 void MpiLasso2::init_gpu(){
+#ifdef USE_GPU
   personchunks = n/BLOCK_WIDTH + (n%BLOCK_WIDTH!=0);
   cl_int err;
   std::vector<cl::Platform> platforms;
@@ -267,32 +233,35 @@ void MpiLasso2::init_gpu(){
   clSafe(err, "create buffer for means");
   opencl_info.sd_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_WRITE, submodelsize * sizeof(float), NULL, &err);
   clSafe(err, "create buffer for sds");
-
-
-  packedstride =  (n/512+(n%512>0)) * 512 / 16; //PACKED_SUBJECT_STRIDE; 
-  ofs<<"Packedstride is: "<<packedstride<<endl;
-  // THE FOLLOWING ARE INITIALIZED
+  opencl_info.group_indices_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, submodelsize * sizeof(int), NULL, &err);
+  clSafe(err, "create buffer for group_indices");
+  opencl_info.l2_norms_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, groups * sizeof(float), NULL, &err);
+  clSafe(err, "create buffer for L2 norms");
+  //opencl_info.l2_norms_big_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, totaltasks * sizeof(float), NULL, &err);
+  //clSafe(err, "create buffer for L2 norms big");
   opencl_info.mask_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, n*sizeof(int), NULL, &err);
   clSafe(err, "create buffer for mask");
   err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.mask_mem_obj, CL_TRUE, 0,  sizeof(int)*n, mask , NULL, NULL);
   clSafe(err,"write mask");
-  opencl_info.aff_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, n*sizeof(int), NULL, &err);
-  clSafe(err, "create buffer for aff");
-  err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.aff_mem_obj, CL_TRUE, 0,  sizeof(int)*n, disease_status, NULL, NULL );
-  clSafe(err, "write buffer for aff");
-  opencl_info.cov_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, n*env_covariates*sizeof(float), NULL, &err);
-  clSafe(err, "create buffer for cov");
-  err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.cov_mem_obj, CL_TRUE, 0,  sizeof(float)*n*env_covariates, covariates, NULL, NULL );
-  clSafe(err, "write buffer for cov");
-  opencl_info.packedgeno_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, (genetic_tasks*packedstride)*sizeof(packedgeno_t), NULL, &err);
-  clSafe(err, "create buffer for packed genotypes");
-  cerr<<"Created buffer for packedgenotypes...\n";
-  err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.packedgeno_mem_obj, CL_TRUE, 0,  sizeof(packedgeno_t)*genetic_tasks*packedstride, packedgeno_matrix, NULL, NULL );
-  clSafe(err, "write buffer for packed genotypes");
-  cerr<<"Wrote data to buffer for packedgenotypes\n";
-
   opencl_info.n_subset_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, sizeof(int), NULL, &err);
   clSafe(err, "create buffer for subset n");
+  opencl_info.aff_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, n*sizeof(int), NULL, &err);
+  clSafe(err, "create buffer for aff");
+  opencl_info.cov_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, n*env_covariates*sizeof(float), NULL, &err);
+  clSafe(err, "create buffer for cov");
+  opencl_info.packedgeno_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, (genetic_tasks*packedstride)*sizeof(packedgeno_t), NULL, &err);
+  clSafe(err, "create buffer for packed genotypes");
+
+  // THE FOLLOWING ARE INITIALIZED
+  //err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.aff_mem_obj, CL_TRUE, 0,  sizeof(int)*n, disease_status, NULL, NULL );
+  //clSafe(err, "write buffer for aff");
+  //err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.cov_mem_obj, CL_TRUE, 0,  sizeof(float)*n*env_covariates, covariates, NULL, NULL );
+  //clSafe(err, "write buffer for cov");
+  //cerr<<"Created buffer for packedgenotypes...\n";
+  //err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.packedgeno_mem_obj, CL_TRUE, 0,  sizeof(packedgeno_t)*genetic_tasks*packedstride, packedgeno_matrix, NULL, NULL );
+  //clSafe(err, "write buffer for packed genotypes");
+  //cerr<<"Wrote data to buffer for packedgenotypes\n";
+
   opencl_info.mean_sd_flag_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_ONLY, 1 * sizeof(int), NULL, &err); 
   clSafe(err, "create buffer for mean sd flag");
   opencl_info.mean_sd_chunks_mem_obj = cl::Buffer(opencl_info.context, CL_MEM_READ_WRITE, submodelsize * sizeof(float)*personchunks, NULL, &err);
@@ -324,7 +293,7 @@ void MpiLasso2::init_gpu(){
   cerr<<"Completed creating buffers...\n";
 
   // Set the OpenCL Kernel arguments
-  int arg=0;
+  int arg;
   // Universal kernels
   cerr<<"Creating kernel args...\n";
   arg = 0;
@@ -450,11 +419,15 @@ void MpiLasso2::init_gpu(){
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++,submodelsize); 
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
-  err = opencl_info.kernel_compute_delta_beta.setArg( arg++,lambda);
-  clSafe(err,"clSetKernelArg_compute_delta_beta_");
+  //err = opencl_info.kernel_compute_delta_beta.setArg( arg++,lambda);
+  //clSafe(err,"clSetKernelArg_compute_delta_beta_");
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++,personchunks); 
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
+  err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.lasso_tuning_param_mem_obj);
+  clSafe(err,"clSetKernelArg_compute_delta_beta_");
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.taskoffset_mem_obj);
+  clSafe(err,"clSetKernelArg_compute_delta_beta_");
+  err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.l2_norms_mem_obj);
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.betas_mem_obj);
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
@@ -463,6 +436,8 @@ void MpiLasso2::init_gpu(){
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.gradient_chunks_mem_obj);
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.hessian_chunks_mem_obj);
+  clSafe(err,"clSetKernelArg_compute_delta_beta_");
+  err = opencl_info.kernel_compute_delta_beta.setArg( arg++, opencl_info.group_indices_mem_obj);
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++, cl::__local(sizeof(float)*SMALL_BLOCK_WIDTH));
   clSafe(err,"clSetKernelArg_compute_delta_beta_");
@@ -599,8 +574,8 @@ void MpiLasso2::init_gpu(){
   err = opencl_info.kernel_zero_score.setArg( arg++, opencl_info.score_den_mem_obj);
   clSafe(err,"clSetKernelArg");
   cerr<<"Done init gpu\n";
-}
 #endif
+}
 
 
 float MpiLasso2::c2g(char * genocharmatrix,int genoveclen,int snp,int person){
@@ -692,28 +667,32 @@ void MpiLasso2::convertgeno(int arrdim,int genoindex,float * genovec){
 }
 
 bool MpiLasso2::load_mean_sd(){
-  ofs<<"Loading means/SD from file\n";
-  ostringstream oss;
-  oss<<"means_sd."<<mpi_rank;
-  ifstream ifs(oss.str().data());
-  if (!ifs.is_open()) return false;
-  for(int i=0;i<submodelsize;++i){
-    string line;
-    getline(ifs,line);
-    istringstream iss(line);
-    iss>>means[i]>>sds[i];
-    //ofs<<i<<"\t"<<means[i]<<"\t"<<sds[i]<<endl;
+  if (mpi_rank) {
+    ofs<<"Loading means/SD from file\n";
+    ostringstream oss;
+    oss<<"means_sd."<<mpi_rank;
+    ifstream ifs(oss.str().data());
+    if (!ifs.is_open()) return false;
+    for(int i=0;i<submodelsize;++i){
+      string line;
+      getline(ifs,line);
+      istringstream iss(line);
+      iss>>means[i]>>sds[i];
+      //ofs<<i<<"\t"<<means[i]<<"\t"<<sds[i]<<endl;
+    }
+    ifs.close();
+    if (settings->use_gpu){
+      #ifdef USE_GPU
+      int err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.mean_mem_obj, CL_TRUE, 0,  sizeof(float)*submodelsize, means , NULL, NULL );
+      clSafe(err,"CommandQueue::write_mean()");
+      err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.sd_mem_obj, CL_TRUE, 0,  sizeof(float)*submodelsize, sds , NULL, NULL );
+      clSafe(err,"CommandQueue::write_sd()");
+      #endif
+    }
+    return true;
+  }else{
+    return true;
   }
-  ifs.close();
-  if (settings->use_gpu){
-    #ifdef USE_GPU
-    int err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.mean_mem_obj, CL_TRUE, 0,  sizeof(float)*submodelsize, means , NULL, NULL );
-    clSafe(err,"CommandQueue::write_mean()");
-    err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.sd_mem_obj, CL_TRUE, 0,  sizeof(float)*submodelsize, sds , NULL, NULL );
-    clSafe(err,"CommandQueue::write_sd()");
-    #endif
-  }
-  return true;
 }
 
 void MpiLasso2::compute_mean_sd(int genomatrix_dim){
@@ -792,101 +771,51 @@ void MpiLasso2::compute_mean_sd(int genomatrix_dim){
 }
 
 void MpiLasso2::zero_beta(){
-  if(settings->use_gpu){
-    #ifdef USE_GPU
-    if (algorithm==ALGORITHM_GREEDY){
-      int err;
-      for (int taskoffset=0;taskoffset<(submodelsize/GRID_WIDTH)+(submodelsize%GRID_WIDTH>0);++taskoffset){
-        err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.taskoffset_mem_obj, CL_TRUE, 0,  sizeof(int)*1, &taskoffset , NULL, NULL);
-        err = opencl_info.command_queue.enqueueNDRangeKernel(opencl_info.kernel_zero_beta,cl::NullRange,cl::NDRange(GRID_WIDTH,1),cl::NDRange(BLOCK_WIDTH,1),NULL,NULL);
-        clSafe(err,"CommandQueue::enqueueNDRangeKernelZeroBeta()");
+  for(int j=0;j<totaltasks;++j) {
+    betas[j] = 0;
+  }
+  for(int j=0;j<groups;++j){
+    l2_norms[j] = 0;
+  }
+  ofs<<"Zeroed l2 norms\n";
+  if (mpi_rank){
+    if(settings->use_gpu){
+      #ifdef USE_GPU
+      if (algorithm==ALGORITHM_GREEDY){
+        int err;
+        for (int taskoffset=0;taskoffset<(submodelsize/GRID_WIDTH)+(submodelsize%GRID_WIDTH>0);++taskoffset){
+          err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.taskoffset_mem_obj, CL_TRUE, 0,  sizeof(int)*1, &taskoffset , NULL, NULL);
+          err = opencl_info.command_queue.enqueueNDRangeKernel(opencl_info.kernel_zero_beta,cl::NullRange,cl::NDRange(GRID_WIDTH,1),cl::NDRange(BLOCK_WIDTH,1),NULL,NULL);
+          clSafe(err,"CommandQueue::enqueueNDRangeKernelZeroBeta()");
+        }
+        ofs<<"Zeroed beta\n";
+        //err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.l2_norms_mem_obj, CL_TRUE, 0,  sizeof(float)*groups,l2_norms, NULL, NULL );
+        //clSafe(err,"CommandQueue::write buffer for L2 norms");
+        //err = opencl_info.command_queue.enqueueReadBuffer(opencl_info.l2_norms_mem_obj, CL_TRUE, 0, sizeof(float)*groups,l2_norms);
+        //clSafe(err,"CommandQueue::read buffer for L2 norms");
+        for(int i=0;i<groups;++i){
+          //ofs<<"Group:\t"<<i<<"\t"<<l2_norms[i]<<endl;
+        }
+
+        int scoreworksize = (n/BLOCK_WIDTH+1)*BLOCK_WIDTH;
+        err = opencl_info.command_queue.enqueueNDRangeKernel(opencl_info.kernel_zero_score,cl::NullRange,cl::NDRange(scoreworksize,1),cl::NDRange(BLOCK_WIDTH,1),NULL,NULL);
+        clSafe(err,"CommandQueue::enqueueNDRangeKernelZeroScore()");
+        ofs<<"Zeroed score\n";
+        // NEED TO ADD KERNEL TO ZERO L2 NORMS
+      }
+      #endif
+    }else{
+      for(int j=0;j<submodelsize;++j) {
+        betas[j] = 0.;
+        if (algorithm==ALGORITHM_GREEDY){
+          deltas[j].delta_beta = 0.;
+          deltas[j].delta_LL = 0.;
+        }
       }
       ofs<<"Zeroed beta\n";
-      int scoreworksize = (n/BLOCK_WIDTH+1)*BLOCK_WIDTH;
-      err = opencl_info.command_queue.enqueueNDRangeKernel(opencl_info.kernel_zero_score,cl::NullRange,cl::NDRange(scoreworksize,1),cl::NDRange(BLOCK_WIDTH,1),NULL,NULL);
-      clSafe(err,"CommandQueue::enqueueNDRangeKernelZeroScore()");
+      for(int i=0;i<n;++i) score[i] = 0;
       ofs<<"Zeroed score\n";
     }
-    #endif
-  }else{
-    for(int j=0;j<submodelsize;++j) {
-      betas[j] = 0.;
-      if (algorithm==ALGORITHM_GREEDY){
-        deltas[j].delta_beta = 0.;
-        deltas[j].delta_LL = 0.;
-      }
-    }
-    ofs<<"Zeroed beta\n";
-    for(int i=0;i<n;++i) score[i] = 0;
-    ofs<<"Zeroed score\n";
-  }
-}
-
-void MpiLasso2::init_parallel_gradient(){
-  if(mpi_rank==0){
-  }else{
-    load_mean_sd();
-  }
-}
-
-void MpiLasso2::init_gradient(){
-  if(mpi_rank==0){
-  }else{
-    load_mean_sd();
-    beta_mirror = new float[submodelsize];
-    beta_mirror_scale = 0;
-    beta_p = 0;
-    for(int i=0;i<submodelsize;++i){
-      beta_mirror[i] = 0;
-    }
-    ofs<<"Initialized "<<submodelsize<<" elements for beta_mirror\n";
-    //zero_beta();
-    bool debug = false;
-    if (debug){
-      ofstream ofs_aff("smidas_test.aff");
-      ofstream ofs_data("smidas_test.data");
-      ofstream ofs_r("r_test.data");
-      ofs_data<<n<<"\t"<<submodelsize<<endl;
-      ofs_r<<"aff";
-      for(int j=0;j<submodelsize;++j){
-         ofs_r<<"\tvar"<<j;
-      }
-      ofs_r<<endl;
-      for(int i=0;i<n;++i){
-        ofs_aff<<disease_status[i]<<endl;
-        ofs_data<<submodelsize;
-        if(disease_status[i]==1) ofs_r<<"1";
-        else ofs_r<<"0";
-        float genovec[submodelsize];
-        fetchgeno_subjectmajor(i,genovec);
-        for(int j=0;j<env_tasks;++j){
-           ofs_data<<"\t"<<j<<"\t"<<(covmatrix_subjectmajor[i*env_tasks+j]-means[j])/sds[j];
-           ofs_r<<"\t"<<(covmatrix_subjectmajor[i*env_tasks+j]-means[j])/sds[j];
-           //cpu_xbeta+=(betas[j]) * (covmatrix_subjectmajor[current_person*env_tasks+j]-means[j])/sds[j] ;
-        }
-        for(int j=0;j<genetic_tasks;++j){
-           ofs_data<<"\t"<<env_tasks+j<<"\t"<<(genovec[j]-means[env_tasks+j])/sds[env_tasks+j];
-           ofs_r<<"\t"<<(genovec[j]-means[env_tasks+j])/sds[env_tasks+j];
-           //cpu_xbeta+=(betas[env_tasks+j])*(genovec[j]-means[env_tasks+j])/sds[env_tasks+j] ;
-        }
-        ofs_data<<endl;
-        ofs_r<<endl;
-      }
-      ofs_aff.close();
-      ofs_data.close();
-      ofs_r.close();
-    }
-//     if (disease_status[i]==1) ofs<<"1"; else ofs<<"0";
-
-//     for(int j=0;j<env_tasks;++j){
-//       if (j!=1) ofs<<" "<<(covmatrix_subjectmajor[i*env_tasks+j]-means[j])/sds[j];
-//     }
-//     for(int j=0;j<genetic_tasks;++j){
-//       ofs<<" "<<(genomatrix_subjectmajor[i*genetic_tasks+j]-means[env_tasks+j])/sds[env_tasks+j];
-//     }
-//     ofs<<endl;
-//    }
-//    ofs.close();
   }
 }
 
@@ -902,21 +831,6 @@ void MpiLasso2::fetchgeno_subjectmajor(int subjectindex, float * genovec){
   }
 }
 
-void MpiLasso2::estimate_parallel_fitted_value(){
-}
-
-void MpiLasso2::estimate_fitted_value(){
-}
-  
-void MpiLasso2::parallel_new_gradient(){
-}
-
-void MpiLasso2::new_gradient(){
-}
-
-void MpiLasso2::gradient_shrink(){
-}
-
 void MpiLasso2::init_greedy(){
   if (mpi_rank==0){
   }else{
@@ -924,9 +838,9 @@ void MpiLasso2::init_greedy(){
     zero_beta();
     float tuning_arr[MPI_FLOAT_ARR];
     rc = MPI_Recv(tuning_arr,MPI_FLOAT_ARR,MPI_FLOAT,source,TAG_UPDATE_TUNING_PARAMS,MPI_COMM_WORLD,&stat);
-    lambda = tuning_arr[0];
+    //float lambda = tuning_arr[0];
     rc = MPI_Recv(mask,n,MPI_INT,source,TAG_UPDATE_MASK,MPI_COMM_WORLD,&stat);
-    n_subset = 0;
+    int n_subset = 0;
     for(int i=0;i<n;++i) n_subset+=mask[i];
     // COMPUTE THE BASE LIKELIHOOD
     nullLL = 0;
@@ -1112,8 +1026,6 @@ void MpiLasso2::greedy_slave(){
       delete[]hessianchunks;
       ofs.close();
       exit(0);
-  
-      
     }
     int smallsnpchunksize = GRID_WIDTH/SMALL_BLOCK_WIDTH+1;
     for (int taskoffset=0;taskoffset<(submodelsize/smallsnpchunksize)+(submodelsize%smallsnpchunksize>0);++taskoffset){
@@ -1242,7 +1154,7 @@ void MpiLasso2::greedy_slave(){
         }
       }
       //ofs<<"Subset size "<<s<<endl;
-      float l1_penalty = genoindex<0?0:lambda;
+      float l1_penalty = genoindex<0?0:tuning_param.lambda;
       if (betas[j]>LAMBDA_EPSILON){
         delta_beta = (gradient-l1_penalty)/hessian;
         if (betas[j]-delta_beta<0) delta_beta = 0;

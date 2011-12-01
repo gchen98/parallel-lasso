@@ -1,0 +1,35 @@
+<lambda>LAMBDA</lambda>
+<lasso_mixture>LASSO_MIXTURE</lasso_mixture>
+<subsamples>100</subsamples>
+<lasso_path>LASSO_PATH</lasso_path>
+<inputdata>
+  <tasklist>simulation/gaw17_bioinformatics/tasklist.txt</tasklist>
+  <genofile>simulation/gaw17_bioinformatics/gaw17.bed</genofile>
+  <pedfile>simulation/gaw17_bioinformatics/famdata/gaw17.fam.0</pedfile>
+  <snpfile>simulation/gaw17_bioinformatics/gaw17.bim</snpfile>
+  <covariates>
+    <datafile>simulation/gaw17_bioinformatics/covariates.txt</datafile>
+    <selectionfile>simulation/gaw17_bioinformatics/covariates.selected</selectionfile>
+  </covariates>
+  <affection_basepath>simulation/gaw17_bioinformatics/famdata/gaw17.fam</affection_basepath>
+  <annotation>simulation/gaw17_bioinformatics/annotation.all</annotation>
+</inputdata>
+<enable_opencl>ENABLE_OPENCL</enable_opencl>
+<opencl_settings>
+  <host rank="0">
+    <platform_id>0</platform_id>
+    <device_id>0</device_id>
+    <kernel_path>/home/garykche/gary/code/src/fit_lasso3.c</kernel_path>
+  </host>
+  <host rank="1">
+    <platform_id>0</platform_id>
+    <device_id>0</device_id>
+    <kernel_path>/home/garykche/gary/code/src/fit_lasso3.c</kernel_path>
+  </host>
+  <host rank="2">
+    <platform_id>0</platform_id>
+    <device_id>1</device_id>
+    <kernel_path>/home/garykche/gary/code/src/fit_lasso3.c</kernel_path>
+  </host>
+</opencl_settings>
+
