@@ -1,0 +1,2 @@
+Can't locate DBI.pm in @INC (@INC contains: /usr/lib/perl5/site_perl/5.12.2/x86_64-linux /usr/lib/perl5/site_perl/5.12.2 /usr/lib/perl5/5.12.2/x86_64-linux /usr/lib/perl5/5.12.2 /usr/lib/perl5/site_perl/5.8.8 /usr/lib/perl5/site_perl .) at /home/garykche/gary/analysis/lasso/simulation/scripts/roc_lasso.pl line 35.
+BEGIN failed--compilation aborted at /home/garykche/gary/analysis/lasso/simulation/scripts/roc_lasso.pl line 35.
