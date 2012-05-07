@@ -19,6 +19,7 @@ const int PLINK_HET=2;
 const int PLINK_MISSING=1;
 
 plink_data_t::plink_data_t(){
+  initialized = false;
   affection = NULL;
   genomatrix = NULL;
 }
@@ -97,6 +98,10 @@ bool IO::readAllCovariates(const char * data, covar_vector_t & covar_vector){
 }
 
 bool IO::readCovariates(const char * data,const char * selected, covar_map_t & covar_map){
+  if (data==NULL || selected==NULL){
+    cerr<<"No covariate filenames specified.  Not loading\n";
+    return true;
+  }
   // NOW LOAD SELECTED PHENOTYPES
   set<string> sel_cov_set;
   ifstream ifs_seldata(selected);
@@ -107,6 +112,7 @@ bool IO::readCovariates(const char * data,const char * selected, covar_map_t & c
     }
     ifs_seldata.close();
   }else{
+    cerr<<"Found a covariate data file but not selection file\n";
     return false;
   }
   cerr<<"Selecting "<<sel_cov_set.size()<<" covariates\n";
@@ -156,84 +162,95 @@ bool IO::readCovariates(const char * data,const char * selected, covar_map_t & c
 }
 
 void IO::readPlinkFiles(const char * bim,const char * fam, const char * bed, plink_data_t & data ){
+  if (!data.initialized && (bim==NULL||fam==NULL||bed==NULL)){
+    cerr<<"Data was not initialized and PLINK file names missing, not loading\n";
+    throw "Reading PLINK files failed";
+  }
   string line;
-  data.totalpersons = 0;
-  data.totalsnps = 0;
-  ifstream ifsperson(fam);
-  while(getline(ifsperson,line)){
-    istringstream iss(line);
-    string subject_id;
-    iss>>subject_id;
-    data.subject_map[subject_id] = data.totalpersons;
-    data.subject_list.push_back(subject_id);
-    ++data.totalpersons;
-  } 
-  cerr<<"Found "<<data.totalpersons<<" persons.\n";
-  ifsperson.close();
-  ifstream ifssnp(bim);
-  while(getline(ifssnp,line)){
-    istringstream iss(line);
-    int chr,position;
-    string rsid;
-    float morgan;
-    char other,ref;
-    iss>>chr>>rsid>>morgan>>position>>other>>ref;
-    data.rs_map[rsid] = data.totalsnps;
-    data.rs_list.push_back(rsid);
-    ++data.totalsnps;
+  if (fam!=NULL){
+    data.totalpersons = 0;
+    ifstream ifsperson(fam);
+    while(getline(ifsperson,line)){
+      istringstream iss(line);
+      string subject_id;
+      iss>>subject_id;
+      data.subject_map[subject_id] = data.totalpersons;
+      data.subject_list.push_back(subject_id);
+      ++data.totalpersons;
+    } 
+    cerr<<"Found "<<data.totalpersons<<" persons.\n";
+    ifsperson.close();
+    // read case control status
+    data.affection = new int[data.totalpersons];
+    ifsperson.open(fam);
+    string val1;
+    int j = 0;
+    int aff;
+    while(getline(ifsperson,line)){
+      istringstream iss(line);
+      for(uint i=0;i<5;++i) iss>>val1;
+      iss>>aff;
+      if (aff==1){
+        data.affection[j] = AFF_CONTROL;
+      }else if (aff==2){
+        data.affection[j] = AFF_CASE;
+      }else{
+        data.affection[j] = AFF_UNDEF;
+      }
+      ++j;
+    } 
+    cerr<<"Loaded "<<(j)<<" affection status rows\n";
+    ifsperson.close();
   }
-  cerr<<"Found "<<data.totalsnps<<" snps.\n";
-  ifssnp.close();
-  // read case control status
-  data.affection = new int[data.totalpersons];
-  ifsperson.open(fam);
-  string val1;
-  int j = 0;
-  int aff;
-  while(getline(ifsperson,line)){
-    istringstream iss(line);
-    for(uint i=0;i<5;++i) iss>>val1;
-    iss>>aff;
-    if (aff==1){
-      data.affection[j] = AFF_CONTROL;
-    }else if (aff==2){
-      data.affection[j] = AFF_CASE;
-    }else{
-      data.affection[j] = AFF_UNDEF;
+  if (bim!=NULL){
+    data.totalsnps = 0;
+    ifstream ifssnp(bim);
+    while(getline(ifssnp,line)){
+      istringstream iss(line);
+      int chr,position;
+      string rsid;
+      float morgan;
+      char other,ref;
+      iss>>chr>>rsid>>morgan>>position>>other>>ref;
+      data.rs_map[rsid] = data.totalsnps;
+      data.rs_list.push_back(rsid);
+      ++data.totalsnps;
     }
-    ++j;
-  } 
-  cerr<<"Loaded "<<(j)<<" affection status rows\n";
-  ifsperson.close();
-  // NOW READ GENOTYPES
-  ifstream ifs(bed);
-  if (!ifs.is_open()){
-     cerr<<"Cannot find "<<bed<<endl;
-     exit(0);
+    cerr<<"Found "<<data.totalsnps<<" snps.\n";
+    ifssnp.close();
   }
-  // read header for SNP major mode
-  char header[3];
-  ifs.read(header,3);
-  data.snp_major = (int)header[2];
-  cerr<<"SNP major?: "<<data.snp_major<<endl;
-  int rows = data.snp_major?data.totalsnps:data.totalpersons;
-  int cols = data.snp_major?data.totalpersons:data.totalsnps;
-
-  bool remainder = (cols % 4 !=0)?true:false;
-  data.veclen = cols/4+remainder; // for remainder
-  char vector_read[data.veclen];
-  //cerr<<"Allocating "<<data.veclen<<"\n";
-  data.genomatrix = new char * [rows];
-  for (int row=0;row<rows;++row){
-    data.genomatrix[row] = new char[data.veclen];
-    ifs.read(vector_read,data.veclen);
-    //cerr<<" "<<row<<endl;
-    for (int col=0;col<data.veclen;++col){
-      data.genomatrix[row][col] = vector_read[col];
+  if (bed!=NULL){
+    // NOW READ GENOTYPES
+    ifstream ifs(bed);
+    if (!ifs.is_open()){
+       cerr<<"Cannot find "<<bed<<endl;
+       exit(0);
     }
+    // read header for SNP major mode
+    char header[3];
+    ifs.read(header,3);
+    data.snp_major = (int)header[2];
+    cerr<<"SNP major?: "<<data.snp_major<<endl;
+    int rows = data.snp_major?data.totalsnps:data.totalpersons;
+    int cols = data.snp_major?data.totalpersons:data.totalsnps;
+  
+    bool remainder = (cols % 4 !=0)?true:false;
+    data.veclen = cols/4+remainder; // for remainder
+    char vector_read[data.veclen];
+    //cerr<<"Allocating "<<data.veclen<<"\n";
+    data.genomatrix = new char * [rows];
+    for (int row=0;row<rows;++row){
+      data.genomatrix[row] = new char[data.veclen];
+      ifs.read(vector_read,data.veclen);
+      //cerr<<" "<<row<<endl;
+      for (int col=0;col<data.veclen;++col){
+        data.genomatrix[row][col] = vector_read[col];
+      }
+    }
+    ifs.close();
+    cerr<<"Loaded genotype bit matrix of "<<rows<<" by "<<cols<<endl;
   }
-  ifs.close();
-  cerr<<"Loaded genotype bit matrix of "<<rows<<" by "<<cols<<endl;
+  data.initialized = true;
 }
 
 void IO::init(){

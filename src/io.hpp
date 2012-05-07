@@ -18,6 +18,7 @@ typedef vector<vector<float> > covar_vector_t;
 
 class plink_data_t{
 public:
+  bool initialized;
   plink_data_t();
   ~plink_data_t();
   bool snp_major;  

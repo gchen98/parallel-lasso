@@ -20,11 +20,13 @@ public:
   void init(const ptree & pt);
   void run();
 private:
+  const char * tpstr;
+  const char * tnstr;
   int * varcounts;
   int totaltasks;
   vector<string> varnames;
   int replicates;
   string affection_basepath;
-
-
+  int max_tp;
+  int max_tn;
 };

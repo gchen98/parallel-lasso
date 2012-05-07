@@ -1,4 +1,5 @@
 #include"/home/garykche/gary/code/src/dimension2.h"
+//#include"/home/garyc/nas/development/mpi_lasso/src/dimension2.h"
 #ifdef HOST_MEC
 #include"/home/garyc/development/mpi_lasso/src/dimension2.h"
 #endif
@@ -205,8 +206,13 @@ __global float * score_den
   if (index<n){
     float aff =  disease_status[index];
     float score_new = score[index];
-    score_num[index] = aff/(1+exp(score_new));
-    score_den[index] = exp(score_new)/((1+exp(score_new))*(1+exp(score_new)));
+//    if (1/(1+exp(score_new))<LAMBDA_EPSILON){
+//      score_num[index] = 0;
+//      score_den[index] = LAMBDA_LARGE;
+//    }else{
+      score_num[index] = aff/(1+exp(score_new));
+      score_den[index] = exp(score_new)/((1+exp(score_new))*(1+exp(score_new)));
+//    }
   }
 }
 
@@ -224,7 +230,7 @@ __global float * score_num,
 __global float * score_den,
 __global float * means,
 __global float * sds,
-__global float * debugvec,
+//__global float * debugvec,
 __global float * gradient_chunks,
 __global float * hessian_chunks,
 __global int * mask,
@@ -237,8 +243,8 @@ __local float * subset_geno1
   MAPPING
   int taskindex = (GRID_WIDTH/BLOCK_WIDTH)* *taskoffset + get_group_id(0);
   int chunk = get_group_id(1);
-  //if (taskindex>=totaltasks) return;
-  if (taskindex>=totaltasks||deltas[taskindex].delta_beta==0) return;
+  if (taskindex>=totaltasks) return;
+  //if (taskindex>=totaltasks||deltas[taskindex].delta_beta==0) return;
   float mean = means[taskindex];
   float sd = sds[taskindex];
   int threadindex = get_local_id(1) * BLOCK_WIDTH + get_local_id(0);
@@ -256,7 +262,8 @@ __local float * subset_geno1
     }
     barrier(CLK_LOCAL_MEM_FENCE);  // WAIT UNTIL ALL GENOTYPES ARE CONVERTED
     local_gradient[threadindex]= (subset_geno1[threadindex]-mean)/sd * score_num[index] * mask[index];
-    local_hessian[threadindex]=pow((subset_geno1[threadindex]-mean)/sd,2)*score_den[index] * mask[index];
+    //local_hessian[threadindex]=pow((subset_geno1[threadindex]-mean)/sd,2);
+    local_hessian[threadindex]=pow((subset_geno1[threadindex]-mean)/sd,2)*score_den[index] *mask[index];
     barrier(CLK_LOCAL_MEM_FENCE); // ALL WARPS HAVE UPDATED TEMP1,2
   }
   for(unsigned int s=BLOCK_WIDTH/2; s>0; s>>=1) {
@@ -277,18 +284,23 @@ __kernel void compute_delta_beta(
 const unsigned int mpi_rank,
 const unsigned int env_covariates,
 const unsigned int totaltasks,
-const float lambda,
+//const float lambda,
 const unsigned int chunks,
+__constant tuning_param_t * tuning_param,
 __constant int * taskoffset,
+__constant float * l2_norms,
 __global float * betas,
 __global delta_t * deltas,
 __global float * gradient_chunks,
 __global float * hessian_chunks,
+__global int * group_indices,
 __local float * local_gradient,
 __local float * local_hessian
 ){
+  float lambda = tuning_param->lambda;
   int taskindex = (GRID_WIDTH/SMALL_BLOCK_WIDTH)* *taskoffset + get_group_id(0);
-  if (taskindex>=totaltasks || deltas[taskindex].delta_beta==0) return;
+  if (taskindex>=totaltasks ) return;
+  //if (taskindex>=totaltasks || deltas[taskindex].delta_beta==0) return;
   int threadindex = get_local_id(1) * SMALL_BLOCK_WIDTH + get_local_id(0);
   local_gradient[threadindex] = 0;
   local_hessian[threadindex] = 0;
@@ -303,25 +315,80 @@ __local float * local_hessian
     }
   }
   if(threadindex==0){
-    float full_penalty = (mpi_rank==1 && taskindex-env_covariates<0)?0:lambda;
+    if (taskindex==4787) {
+      //currdeltabeta = l2_norms[group_index];
+      //deltas[taskindex].delta_beta = l2_norms[497];
+      //return;
+    }
+    int group_index = group_indices[taskindex];
     float origbeta = betas[taskindex];
     float currdeltabeta = 0;
-    if (origbeta>LAMBDA_EPSILON){
-      currdeltabeta = (local_gradient[0]-full_penalty)/local_hessian[0];
-      if (origbeta-currdeltabeta<0) currdeltabeta = 0;
-    }else if (origbeta<-LAMBDA_EPSILON){
-      currdeltabeta = (local_gradient[0]+full_penalty)/local_hessian[0];
-      if (origbeta-currdeltabeta>0) currdeltabeta = 0;
-    }else{
-      if (local_gradient[0]>full_penalty){
-        currdeltabeta = (local_gradient[0]-full_penalty)/local_hessian[0];
-      }else if (local_gradient[0]<-full_penalty){
-        currdeltabeta = (local_gradient[0]+full_penalty)/local_hessian[0];
+    float l1_penalty =  0,l2_penalty = 0;
+    //group_index = -1;
+    if (group_index==-1){  // for majority of SNPs, apply standard LASSO
+      l1_penalty = (mpi_rank>1 || taskindex-env_covariates>=0)?                       tuning_param->lambda:0;  // penalize only genetic predictors 
+      //l1_penalty = 10000;
+      if (origbeta>LAMBDA_EPSILON){
+        currdeltabeta = (local_gradient[0]-l1_penalty)/
+        local_hessian[0];
+        if (origbeta-currdeltabeta<0) currdeltabeta = 0;
+      }else if (origbeta<-LAMBDA_EPSILON){
+        currdeltabeta = (local_gradient[0]+l1_penalty)/
+        local_hessian[0];
+        if (origbeta-currdeltabeta>0) currdeltabeta = 0;
       }else{
-        currdeltabeta = 0;
+        if (local_gradient[0]>l1_penalty){
+          currdeltabeta = (local_gradient[0]-l1_penalty)/
+          local_hessian[0];
+        }else if (local_gradient[0]<-l1_penalty){
+          currdeltabeta = (local_gradient[0]+l1_penalty)/
+          local_hessian[0];
+        }else{
+          currdeltabeta = 0;
+        }
+      }
+    }else{  // for SNPs in groups, apply mixed penalty of Zhou and Lange
+      l1_penalty = tuning_param->lasso_mixture*tuning_param->lambda;
+      l2_penalty = (1-tuning_param->lasso_mixture)*tuning_param->lambda;
+      if (taskindex==4787){
+        //deltas[taskindex].delta_beta = group_indices[taskindex];
+        //deltas[taskindex].delta_beta = l2_norms_big[taskindex];
+        //return;
+      }
+      float l2norm = l2_norms[group_index];
+      float full_penalty = l1_penalty;
+      if (origbeta>LAMBDA_EPSILON){
+        float l2 = l2_penalty/sqrt(l2norm);
+        full_penalty += l2 * origbeta;
+        local_hessian[0]+=l2*(1-origbeta*origbeta/l2norm);
+        currdeltabeta = (local_gradient[0]-full_penalty)/local_hessian[0];
+        if (origbeta-currdeltabeta<0) currdeltabeta = 0;
+      }else if (origbeta<-LAMBDA_EPSILON){
+        float l2 = l2_penalty/sqrt(l2norm);
+        full_penalty -= l2*origbeta;
+        local_hessian[0]+=l2*(1-origbeta*origbeta/l2norm);
+        currdeltabeta = (local_gradient[0]+full_penalty)/local_hessian[0];
+        if (origbeta-currdeltabeta>0) currdeltabeta = 0;
+      }else{
+        if (l2norm<LAMBDA_EPSILON){
+          if (taskindex==4787) full_penalty += l2_penalty;
+          else full_penalty += l2_penalty;
+        }else{
+          full_penalty = taskindex==4787?l1_penalty:l1_penalty;
+          local_hessian[0]+=l2_penalty/sqrt(l2norm);
+        }
+        if (local_gradient[0]>full_penalty){
+          currdeltabeta = (local_gradient[0]-full_penalty)/local_hessian[0];
+        }else if (local_gradient[0]<-full_penalty){
+          currdeltabeta = (local_gradient[0]+full_penalty)/local_hessian[0];
+        }else{
+          currdeltabeta = (taskindex==4787)?0:0;
+        }
       }
     }
     deltas[taskindex].delta_beta = currdeltabeta;
+      //deltas[taskindex].delta_beta = l2_norms[group_indices[taskindex]];
+      //return;
   }
   return;
 }
@@ -339,7 +406,6 @@ __constant float * currentLL,
 __global const packedgeno_t * packedgeno_matrix,
 __global const float * cov,
 __global const int * aff,
-__global const float * trait,
 __global float * score,
 __global float * betas,
 __global float * means,
@@ -351,28 +417,24 @@ __local packedgeno_t * geno_1,
 __local float * subset_geno1,
 __local float * likelihood
 ){
-
   MAPPING
   int taskindex = (GRID_WIDTH/BLOCK_WIDTH)* *taskoffset + get_group_id(0);
+  int chunk = get_group_id(1);
   //if (taskindex>=totaltasks) return;
-  if (taskindex>=totaltasks||deltas[taskindex].delta_beta==0) return;
+  float currdeltabeta = deltas[taskindex].delta_beta;
+  if (taskindex>=totaltasks||currdeltabeta==0) return;
   float mean = means[taskindex];
   float sd = sds[taskindex];
-  int chunk = get_group_id(1);
   int snp1 = mpi_rank>1?taskindex:taskindex-env_covariates;
   int threadindex = get_local_id(1) * BLOCK_WIDTH + get_local_id(0);
  
-  float currdeltabeta = deltas[taskindex].delta_beta;
-  if (currdeltabeta==0) {
-    return;
-  }
   likelihood[threadindex] = logistic?1:0;
   subset_geno1[threadindex] = 0;
   barrier(CLK_LOCAL_MEM_FENCE);
 
   int index = chunk*BLOCK_WIDTH+threadindex;
   if (index<n){
-    float subset_aff = logistic?aff[index]:trait[index];
+    float subset_aff = aff[index];
     float subset_score = score[index];
     if (snp1<0) convertcov(snp1,threadindex,index,n,cov,subset_geno1);
     else{
@@ -391,7 +453,7 @@ __local float * likelihood
     }
     barrier(CLK_LOCAL_MEM_FENCE); // wait until all warps have computed LL
   }
-  if (logistic) likelihood[threadindex] = log(likelihood[threadindex]);
+  likelihood[threadindex] = log(likelihood[threadindex]);
   barrier(CLK_LOCAL_MEM_FENCE); // wait until all warps have computed LL
   for(unsigned int s=BLOCK_WIDTH/2; s>0; s>>=1) {
     if (threadindex < s) {
@@ -400,6 +462,7 @@ __local float * likelihood
     barrier(CLK_LOCAL_MEM_FENCE);
   }
   likelihood_chunks[taskindex*chunks+chunk] = likelihood[0];
+  //likelihood_chunks[taskindex*chunks+chunk] = 99;
   return;
 }
 
@@ -420,7 +483,6 @@ __local float * likelihood
 
   int taskindex = (GRID_WIDTH/SMALL_BLOCK_WIDTH)* *taskoffset + get_group_id(0);
   int chunk = get_group_id(1);
-  //if (taskindex>=totaltasks) return;
   if (taskindex>=totaltasks) return;
   float currdeltabeta = deltas[taskindex].delta_beta;
   if (currdeltabeta==0) {

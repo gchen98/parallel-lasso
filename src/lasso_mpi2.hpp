@@ -138,6 +138,7 @@ protected:
   void send_covariates();
   void send_tuning_params();
   void send_tuning_params(float lambda, float mixing);
+  void testfit(vector<modelvariable_t> & modelvariables, int & mislabels, int & correctlabels);
   bool fitLassoGreedy(int replicate, double  & logL, vector<modelvariable_t> & modelvariables);
   //void fitLassoGreedy(double  & logL, int & modelsize, bool & terminate, int replicate);
   void cleanup();
@@ -337,7 +338,7 @@ private:
   void sampleCoeff(float * hatmat, int rank, float * coeff, float * designMat, float & residual);
 
   // slave functions
-  bool load_mean_sd();
+  bool load_mean_sd(int suffix,int len,float *means,float * sds);
   void listen();
   void init_slave_dim();
   void cleanup_slave();

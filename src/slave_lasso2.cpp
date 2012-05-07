@@ -393,8 +393,8 @@ void MpiLasso2::init_gpu(){
   clSafe(err,"clSetKernelArg_compute_gradient");
   err = opencl_info.kernel_compute_gradient_hessian.setArg( arg++, opencl_info.sd_mem_obj);
   clSafe(err,"clSetKernelArg_compute_gradient");
-  err = opencl_info.kernel_compute_gradient_hessian.setArg( arg++, opencl_info.debug_mem_obj);
-  clSafe(err,"clSetKernelArg_compute_gradient");
+//  err = opencl_info.kernel_compute_gradient_hessian.setArg( arg++, opencl_info.debug_mem_obj);
+//  clSafe(err,"clSetKernelArg_compute_gradient");
   err = opencl_info.kernel_compute_gradient_hessian.setArg( arg++, opencl_info.gradient_chunks_mem_obj);
   clSafe(err,"clSetKernelArg_compute_gradient");
   err = opencl_info.kernel_compute_gradient_hessian.setArg( arg++, opencl_info.hessian_chunks_mem_obj);
@@ -411,6 +411,9 @@ void MpiLasso2::init_gpu(){
   clSafe(err,"clSetKernelArg_compute_gradient");
   err = opencl_info.kernel_compute_gradient_hessian.setArg( arg++, cl::__local(sizeof(float)*BLOCK_WIDTH));
   clSafe(err,"clSetKernelArg_compute_gradient");
+  int kernelWorkGroupSize = opencl_info.kernel_compute_gradient_hessian.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[settings->device_id], &err);
+  clSafe(err,"get workgroup size kernel compute gradient");
+  cerr<<"Kernel compute gradient  work group size is "<<kernelWorkGroupSize<<endl;
 
   arg = 0;
   err = opencl_info.kernel_compute_delta_beta.setArg( arg++,mpi_rank); 
@@ -465,15 +468,11 @@ void MpiLasso2::init_gpu(){
   clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.currLL_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
-  //err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.float_geno_mem_obj);
-  //clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.packedgeno_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.cov_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.aff_mem_obj);
-  clSafe(err,"clSetKernelArg_compute_likelihoods");
-  err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.trait_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.score_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
@@ -485,8 +484,6 @@ void MpiLasso2::init_gpu(){
   clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.delta_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
-  //err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.tasklist_mem_obj);
-  //clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.loglike_chunks_mem_obj);
   clSafe(err,"clSetKernelArg_compute_likelihoods");
   err = opencl_info.kernel_compute_likelihoods.setArg( arg++, opencl_info.mask_mem_obj);
@@ -666,33 +663,30 @@ void MpiLasso2::convertgeno(int arrdim,int genoindex,float * genovec){
   }
 }
 
-bool MpiLasso2::load_mean_sd(){
-  if (mpi_rank) {
-    ofs<<"Loading means/SD from file\n";
-    ostringstream oss;
-    oss<<"means_sd."<<mpi_rank;
-    ifstream ifs(oss.str().data());
-    if (!ifs.is_open()) return false;
-    for(int i=0;i<submodelsize;++i){
-      string line;
-      getline(ifs,line);
-      istringstream iss(line);
-      iss>>means[i]>>sds[i];
-      //ofs<<i<<"\t"<<means[i]<<"\t"<<sds[i]<<endl;
-    }
-    ifs.close();
-    if (settings->use_gpu){
-      #ifdef USE_GPU
-      int err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.mean_mem_obj, CL_TRUE, 0,  sizeof(float)*submodelsize, means , NULL, NULL );
-      clSafe(err,"CommandQueue::write_mean()");
-      err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.sd_mem_obj, CL_TRUE, 0,  sizeof(float)*submodelsize, sds , NULL, NULL );
-      clSafe(err,"CommandQueue::write_sd()");
-      #endif
-    }
-    return true;
-  }else{
-    return true;
+bool MpiLasso2::load_mean_sd(int suffix,int len,float * mean_vec,
+float * sd_vec){
+  ofs<<"Loading mean_vec/SD from file\n";
+  ostringstream oss;
+  oss<<"means_sd."<<suffix;
+  ifstream ifs(oss.str().data());
+  if (!ifs.is_open()) return false;
+  for(int i=0;i<len;++i){
+    string line;
+    getline(ifs,line);
+    istringstream iss(line);
+    iss>>mean_vec[i]>>sd_vec[i];
+    //cerr<<i<<"\t"<<mean_vec[i]<<"\t"<<sd_vec[i]<<endl;
   }
+  ifs.close();
+  if (mpi_rank && settings->use_gpu){
+    #ifdef USE_GPU
+    int err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.mean_mem_obj, CL_TRUE, 0,  sizeof(float)*len, mean_vec , NULL, NULL );
+    clSafe(err,"CommandQueue::write_mean()");
+    err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.sd_mem_obj, CL_TRUE, 0,  sizeof(float)*len, sd_vec , NULL, NULL );
+    clSafe(err,"CommandQueue::write_sd()");
+    #endif
+  }
+  return true;
 }
 
 void MpiLasso2::compute_mean_sd(int genomatrix_dim){
@@ -914,7 +908,7 @@ void MpiLasso2::init_greedy(){
       }
       #endif
     }
-    if (!load_mean_sd()) compute_mean_sd(1);
+    //if (!load_mean_sd(mpi_rank,submodelsize,means,sds)) compute_mean_sd(1);
     for(int i=0;i<submodelsize;++i) varcounts[i] = 0;
     currentLL = nullLL;
     ofs<<"Done init slave greedy"<<endl;

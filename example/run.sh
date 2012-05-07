@@ -20,7 +20,7 @@ for lasso_mixture in $lasso_mixtures
 do
   echo Using lasso mixture $lasso_mixture
   sed "s/ENABLE_OPENCL/$enable_opencl/" $template_file | sed "s/LAMBDA/$lambda/" | sed "s/LASSO_PATH/$lasso_path/"  | sed "s/LASSO_MIXTURE/$lasso_mixture/" > $xml_file
-  ln -fs $HOME/bin/bvs lasso2
+  ln -fs ../bin/analyzer lasso2
   mpiexec -np $processors  ./lasso2 $analysis_name  </dev/null  2>&1
   mv debug_master 'debug_master.'$lasso_mixture
 done

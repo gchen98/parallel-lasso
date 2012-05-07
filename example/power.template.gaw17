@@ -19,17 +19,17 @@
   <host rank="0">
     <platform_id>0</platform_id>
     <device_id>0</device_id>
-    <kernel_path>/home/garykche/gary/code/src/fit_lasso3.c</kernel_path>
+    <kernel_path>fit_lasso3.c</kernel_path>
   </host>
   <host rank="1">
     <platform_id>0</platform_id>
     <device_id>0</device_id>
-    <kernel_path>/home/garykche/gary/code/src/fit_lasso3.c</kernel_path>
+    <kernel_path>fit_lasso3.c</kernel_path>
   </host>
   <host rank="2">
     <platform_id>0</platform_id>
     <device_id>1</device_id>
-    <kernel_path>/home/garykche/gary/code/src/fit_lasso3.c</kernel_path>
+    <kernel_path>fit_lasso3.c</kernel_path>
   </host>
 </opencl_settings>
 

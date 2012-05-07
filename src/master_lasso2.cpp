@@ -120,7 +120,7 @@ void MpiLasso2::read_data(const char * snpfile, const char * pedfile, const char
   if (mask==NULL) mask = new int[n];
   for(int i=0;i<n;++i) mask[i] = 1;
   if (covdata==NULL||covselection==NULL){
-    cerr<<"Skipping covariate files read\n";
+    ofs<<"Skipping covariate files read\n";
   }else{
     io->readCovariates(covdata,covselection,cmap);
     if (cmap.size()==0) throw "No valid covariates found.";
@@ -143,7 +143,7 @@ void MpiLasso2::read_data(const char * snpfile, const char * pedfile, const char
   }
   // store affection status
   if (maskfile==NULL){
-    cerr<<"Skipping mask file read\n";
+    ofs<<"Skipping mask file read\n";
   }else{
     ifstream ifs_mask(maskfile);
     if (!ifs_mask.is_open()){
@@ -194,7 +194,7 @@ void MpiLasso2::read_tasks(const char * taskfile, const char * annotationfile){
   ifs_task.close();
   totaltasks = env_covariates + genetic_tasks;
   if (annotationfile==NULL){
-    cerr<<"Skipping annotation file read\n";
+    ofs<<"Skipping annotation file read\n";
   }else{
     if (group_indices==NULL) group_indices = new int[totaltasks];
     for(int i=0;i<totaltasks;++i) group_indices[i] = -1;
@@ -508,6 +508,57 @@ string MpiLasso2::getname(int genoindex){
 }
 
 
+void MpiLasso2::testfit(vector<modelvariable_t>  & modelvariables, int & mislabels,int & correctlabels){
+  float * mean_vec = new float[totaltasks];
+  float * sd_vec = new float[totaltasks];
+  int offset = 0;
+  //ofstream ofsdebug("debug.meansd");
+  for(int dest = 1;dest<mpi_numtasks;++dest){
+    int slave = dest-1;
+    //ofsdebug<<"Tasks by slave: "<<tasks_by_slave[slave]<<endl;
+    load_mean_sd(dest,tasks_by_slave[slave],mean_vec+offset,sd_vec+offset);
+    offset+=tasks_by_slave[slave];
+  }
+  //cerr<<"Loaded means and SDs\n";
+  for(int i=0;i<totaltasks;++i){
+    //ofsdebug<<i<<":"<<mean_vec[i]<<","<<sd_vec[i]<<endl;
+  }
+  //ofsdebug<<endl;
+  //ofsdebug.close();
+  float genovec[n];
+  float fittedvalues[n];
+  memset(fittedvalues,0,sizeof(float)*n);
+  //ofsdebug.open("debug.geno");
+  for(vector<modelvariable_t>::iterator it = modelvariables.begin();
+  it!=modelvariables.end();it++){
+    int genoindex = it->index-env_covariates;
+    convertgeno(1,genoindex,genovec);
+    for(int i=0;i<n;++i){
+      //ofsdebug<<genovec[i];
+      if (mask[i]){
+        fittedvalues[i]+=it->beta*((genovec[i]-mean_vec[it->index])/sd_vec[it->index]);
+      }
+    }
+    //ofsdebug<<endl;
+  }
+  //ofsdebug.close();
+  //MPI_Finalize();
+  for(int i=0;i<n;++i){
+    if (mask[i]){
+      float prob = 1./(1.+exp(-fittedvalues[i]));
+      //cerr<<"Prob for person "<<i<<" is "<<prob<<endl;
+      if (prob>=.5 && disease_status[i]==1 || prob<.5 && disease_status[i]==-1){
+        ++correctlabels;
+      }else{
+        ++mislabels;
+      }
+    }
+  }
+  delete[] mean_vec;
+  delete[] sd_vec;
+  //exit(1);
+}
+
 bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariable_t>  & modelvariables){
 //void MpiLasso2::fitLassoGreedy(double & logL, int & modelsize, bool & terminate, int replicate){
   modelvariables.clear();
@@ -516,7 +567,7 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
   bool terminate = false;
   zero_beta();
   if(mpi_rank){
-    if (!load_mean_sd()) compute_mean_sd(1);
+    if (!load_mean_sd(mpi_rank,submodelsize,means,sds)) compute_mean_sd(1);
   }
   for(int i=0;i<totaltasks;++i) betas[i] = 0;
   int n_subset = 0;
@@ -596,22 +647,30 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
           err = opencl_info.command_queue.enqueueReadBuffer(opencl_info.score_mem_obj, CL_TRUE, 0, n*sizeof(float),tempscore);
           err = opencl_info.command_queue.enqueueReadBuffer(opencl_info.score_num_mem_obj, CL_TRUE, 0, n*sizeof(float),tempscore1);
           err = opencl_info.command_queue.enqueueReadBuffer(opencl_info.score_den_mem_obj, CL_TRUE, 0, n*sizeof(float),tempscore2);
-          //ofs<<"score after beta update: ";
+          ofs<<"score after beta update: ";
           for(int i=0;i<n;++i){
-           // ofs<<i<<":"<<tempscore[i]<<","<<tempscore1[i]<<","<<tempscore2[i]<<endl;
+            ofs<<i<<":"<<tempscore[i]<<","<<tempscore1[i]<<","<<tempscore2[i]<<endl;
           }
-          //ofs<<"currentLL: "<<currentLL<<endl;
-          //ofs.close(); exit(0);
+          ofs<<"currentLL: "<<currentLL<<endl;
+          ofs.close(); 
+          exit(0);
         }
         err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.currLL_mem_obj, CL_TRUE, 0,  sizeof(float)*1,&currentLL, NULL, NULL );
         snpchunksize = GRID_WIDTH/BLOCK_WIDTH;
         // launch the CLG kernel that computes the delta beta at each SNP
         //for (int taskoffset=0;taskoffset<1;++taskoffset){
+//cerr<<"computing gradient across "<<(totaltasks/snpchunksize)+(totaltasks%snpchunksize>0) <<" person chunks: "<<personchunks<<"\n";
+        //for (int taskoffset=0;taskoffset<1;++taskoffset){
         for (int taskoffset=0;taskoffset<(totaltasks/snpchunksize)+(totaltasks%snpchunksize>0);++taskoffset){
+          //cerr<<"Writing task offset "<<taskoffset<<endl;
           err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.taskoffset_mem_obj, CL_TRUE, 0,  sizeof(int)*1, &taskoffset , NULL, NULL );
+          //cerr<<"Wrote task offset "<<taskoffset<<endl;
           //cl::Event delta_beta_event;
           err = opencl_info.command_queue.enqueueNDRangeKernel(opencl_info.kernel_compute_gradient_hessian,cl::NullRange,cl::NDRange(GRID_WIDTH,personchunks),cl::NDRange(BLOCK_WIDTH,1),NULL,NULL);
+          clSafe(err,"CommandQueue::enqueueNDRangeKernelComputeGradient()");
+          //cerr<<"Launched gradient hessian\n";
         }
+//cerr<<"computed gradient\n";
         bool debug2 = false;
         if (debug2){
           ofs<<"Gradient/Hessian chunks\n";
@@ -621,20 +680,20 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
           err = opencl_info.command_queue.enqueueReadBuffer(opencl_info.hessian_chunks_mem_obj, CL_TRUE, 0, submodelsize*personchunks*sizeof(float),hessianchunks);
           //for(int i=0;i<500;++i){
           for(int i=0;i<submodelsize;++i){
-            //ofs<<"var:"<<i;
+            ofs<<"var:"<<i;
             float num = 0, den = 0;
             for(int j=0;j<personchunks;++j){
-              //ofs<<" "<<gradientchunks[i*personchunks+j]<<"/"<<hessianchunks[i*personchunks+j];
+              ofs<<" "<<gradientchunks[i*personchunks+j]<<"/"<<hessianchunks[i*personchunks+j];
               num+=gradientchunks[i*personchunks+j];
               den+=hessianchunks[i*personchunks+j];
             }
             ofs<<"GPUDEBUG:"<<i<<",Gradient:"<<num<<"Hessian:"<<den<<endl;
-            //ofs<<endl;
+            ofs<<endl;
           }
           delete[]gradientchunks;
           delete[]hessianchunks;
-          //ofs.close();
-          //exit(0);
+          ofs.close();
+          exit(0);
         }
         int smallsnpchunksize = GRID_WIDTH/SMALL_BLOCK_WIDTH+1;
         for (int taskoffset=0;taskoffset<(totaltasks/smallsnpchunksize)+(totaltasks%smallsnpchunksize>0);++taskoffset){
@@ -642,6 +701,7 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
           err = opencl_info.command_queue.enqueueNDRangeKernel(opencl_info.kernel_compute_delta_beta,cl::NullRange,cl::NDRange(GRID_WIDTH,1),cl::NDRange(SMALL_BLOCK_WIDTH,1),NULL,NULL);
           clSafe(err,"CommandQueue::enqueueNDRangeKernel delta beta()");
         }
+//cerr<<"reduced gradient\n";
         bool debug2b = false;
         if (debug2b){
           float tempgroups[groups];
@@ -673,10 +733,11 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
             //}
           }
           ofs<<"Modelsize: "<<ms<<endl;
-          //ofs.close();
-          //exit(0);
+          ofs.close();
+          exit(0);
         }
        // launch the kernel that computes the delta LL at each SNP
+//cerr<<"launching likelihood\n";
         for (int taskoffset=0;taskoffset<(totaltasks/snpchunksize)+(totaltasks%snpchunksize>0);++taskoffset){
           err = opencl_info.command_queue.enqueueWriteBuffer(opencl_info.taskoffset_mem_obj, CL_TRUE, 0,  sizeof(int)*1, &taskoffset , NULL, NULL );
           //cl::Event proposeLLevent;
@@ -685,6 +746,7 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
           clSafe(err,"CommandQueue::enqueueNDRangeKernelProposeLL()");
           //printExecutionCode("LogLike",proposeLLevent);
         }
+//cerr<<"launched likelihood\n";
         bool debug3 = false;
         if (debug3){
           ofs<<"Likelihood chunks\n";
@@ -699,8 +761,8 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
             ofs<<"GPUDEBUG:"<<i<<",Likelihood:"<<sum<<endl;
           }
           delete[] likelihood_chunks;
-          //ofs.close();
-          //exit(0);
+          ofs.close();
+          exit(0);
         }
 
         for (int taskoffset=0;taskoffset<(totaltasks/smallsnpchunksize)+(totaltasks%smallsnpchunksize>0);++taskoffset){
@@ -979,8 +1041,20 @@ bool MpiLasso2::fitLassoGreedy(int replicate, double & logL, vector<modelvariabl
           if (data.affection[i]==1) logL += log(pY); else logL += log(1-pY);
         }
       }
-      //ofs<<"MS: "<<modelsize<<", currentLL: "<<(2.*currentLL)<<", newLL: "<<(2.*logL)<<", BIC: "<<-(2.*logL)+modelsize*log(n_subset) <<", Iterations: "<<iter<<endl;
-      //ofs<<endl;
+      bool poll = true;
+      if (poll){
+        modelsize = 0;
+        for(int j=0;j<totaltasks;++j){
+          if (betas[j]!=0.) {
+            ++modelsize;
+            string name1,name2;
+            name1 = getname(j-env_covariates);
+            ofs<<j<<"\t"<<name1<<"\t"<<betas[j]<<endl;
+          }
+        }
+        ofs<<"MS: "<<modelsize<<", currentLL: "<<(2.*currentLL)<<", newLL: "<<(2.*logL)<<", BIC: "<<-(2.*logL)+modelsize*log(n_subset) <<", Iterations: "<<iter<<endl;
+        ofs<<endl;
+      }
     }else{ // slave receives best indices
       rc = MPI_Recv(best_indices,MPI_INT_ARR,MPI_INT,source,TAG_BETA_UPDATE_INDEX,MPI_COMM_WORLD,&stat);
       rc = MPI_Recv(bestvar,MPI_FLOAT_ARR,MPI_FLOAT,source,TAG_BETA_UPDATE_VAL,MPI_COMM_WORLD,&stat);

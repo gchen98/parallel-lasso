@@ -1,50 +1,29 @@
-#CFLAGS = -Wall -O3  -I/usr/include
-
-COMMONCFLAGS = -Wall  -g 
-COMMONLINKFLAGS = -lm  -g
+# we have used ATI's SDK although nVidia's would be appropriate as well
 ATISTREAMSDKROOT=/home/garykche/ati-stream-sdk-v2.2-lnx64
 OPENCL_INC_FLAGS = -I$(ATISTREAMSDKROOT)/include -I/usr/local/cuda_sdk/shared/inc
 OPENCL_LIB_FLAGS = -L$(ATISTREAMSDKROOT)/lib/x86_64 -lOpenCL
 
+# please specify here the location of your Boost header files
 BOOST_INC_FLAGS = -I/home/garykche/boost/include
 
-GSL_LIB_FLAGS = -lgsl -lgslcblas
+# please specify here the location of your MPI header files (e.g. mpi.h)
 MPI_INC_FLAGS = -I/home/garykche/mpich2
-#MPI_INC_FLAGS = -I/usr/lib64/openmpi/1.4-gcc/include
 
-MYSQL_INC_FLAGS = -I/usr/include/mysql
-MYSQL_LIB_FLAGS = -L/usr/lib64/mysql -lmysqlclient
-
-
-
-# program name
-#LASSO=lasso
-#STEPWISE=stepwise
-#UNIVARIATE=univariate
-#HMM=hmm_cnv
-#HMMIMPUTE=hmm_impute
-
-# environment
-ENV=s3
+COMMONCFLAGS = -Wall  -g 
+COMMONLINKFLAGS = -lm  -g
+GSL_LIB_FLAGS = -lgsl -lgslcblas
 
 COMMON_OBJS=analyzer.o main.o io.o
 
-ifeq ($(ENV),s3)
-  # compiler
-  CC = g++
-  #LINKER = g++
-  #CC = mpicxx
-  LINKER = mpicxx
-  PREPROC=-Dlasso2=1 -DUSE_GPU -Dpower=1 -Dstability=1
-  OBJS=$(COMMON_OBJS) utility.o power.o stability.o slave_lasso2.o master_lasso2.o clsafe.o
-  CFLAGS=$(COMMONCFLAGS) $(BOOST_INC_FLAGS) $(OPENCL_INC_FLAGS) $(MPI_INC_FLAGS)
-  LINKFLAGS=$(COMMONLINKFLAGS) $(GSL_LIB_FLAGS) $(OPENCL_LIB_FLAGS) $(MPI_LIB_FLAGS)
-endif
+# compiler
+CC = g++
+LINKER = mpicxx
+PREPROC=-Dlasso=1 -DUSE_GPU -Dpower=1 -Dstability=1
+OBJS=$(COMMON_OBJS) utility.o power.o stability.o slave_lasso2.o master_lasso2.o clsafe.o
+CFLAGS=$(COMMONCFLAGS) $(BOOST_INC_FLAGS) $(OPENCL_INC_FLAGS) $(MPI_INC_FLAGS)
+LINKFLAGS=$(COMMONLINKFLAGS) $(GSL_LIB_FLAGS) $(OPENCL_LIB_FLAGS) $(MPI_LIB_FLAGS)
 
 PROGRAM=../bin/analyzer
-
-# stepwise.o univariate.o
-#MPI_OBJS=$(COMMON_OBJS) lasso_mpi.o
 
 bvs: $(OBJS)
 	$(LINKER) -o $(PROGRAM) $(OBJS) $(LINKFLAGS)
@@ -76,6 +55,5 @@ stability.o:  stability.cpp stability.hpp analyzer.hpp main.hpp dimension2.h
 utility.o: utility.cpp utility.hpp
 	$(CC) $(CFLAGS) -c $<
 
-#all : $(BVS)
 clean :
 	rm -fr *.o $(PROGRAM)

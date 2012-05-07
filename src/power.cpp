@@ -46,6 +46,8 @@ void Power::init(const ptree & pt){
   read_data(settings->snpfile.data(),settings->pedfile.data(),settings->genofile.data(),settings->covariatedatafile.data(),settings->covariateselectionfile.data(),NULL);
   read_tasks(settings->tasklist.data(),settings->annotationfile.data());
   varnames = get_tasknames();
+  tpstr = "CAUSAL";
+  tnstr = "NULL";
   totaltasks = varnames.size();
   varcounts = new int[totaltasks];
   ofs<<"There are "<<totaltasks<<" total tasks\n";
@@ -56,6 +58,16 @@ void Power::init(const ptree & pt){
   //send_phenotypes();
   send_covariates();
   send_genotypes();
+  max_tn =0;
+  max_tp = 0;
+  for(int i=0;i<totaltasks;++i){
+    if (varnames[i].find(tpstr)!=string::npos){
+      max_tp+=replicates;
+    } else if (varnames[i].find(tnstr)!=string::npos){
+      max_tn+=replicates;
+    }
+  }
+  cerr<<"Max true positives,negatives : "<<max_tp<<","<<max_tn<<endl;
 }
 
 void Power::run(){
@@ -90,17 +102,23 @@ void Power::run(){
       --lambda;
       if (terminate) ofs<<"Model terminated as problem is underdetermined\n";
     }
-    cerr<<"Terminated\n";
+    //cerr<<"Terminated\n";
   }
   if (is_master){
+    string tpstr = "CAUSAL";
+    string tnstr = "NULL";
+    int obs_tn=0,obs_tp=0;
     for(int i=0;i<totaltasks;++i){
-      ofs<<"Power:\n";
-      if (varcounts[i]>0){
-        ofs<<varnames[i]<<":\t"<<1.*varcounts[i]/replicates<<endl;
+      if (varnames[i].find(tpstr)!=string::npos){
+        obs_tp+=varcounts[i];
+      } else if (varnames[i].find(tnstr)!=string::npos){
+        obs_tn+=varcounts[i];
       }
     }
+    cout<<"True positive rate: "<<(1.*obs_tp/max_tp)<<endl;
+    cout<<"False positive rate: "<<(1.*obs_tn/max_tn)<<endl;
   }
-  cerr<<"Cleaning up\n";
+  cerr<<"Cleaning up resources\n";
   cleanup();
 }
 
