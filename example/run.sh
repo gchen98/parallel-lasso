@@ -5,7 +5,6 @@ if [ $# -lt 2 ] ; then
   exit 1
 fi
 
-
 enable_opencl=$1
 lambda=$2
 lasso_path=$3
@@ -16,11 +15,12 @@ dataset='gaw17'
 template_file=$analysis_name'.template.'$dataset
 xml_file=$analysis_name'.xml'
 
+cp ../parallel-lasso/fit_lasso3.c .
+cp ../parallel-lasso/dimension2.h .
 for lasso_mixture in $lasso_mixtures
 do
   echo Using lasso mixture $lasso_mixture
   sed "s/ENABLE_OPENCL/$enable_opencl/" $template_file | sed "s/LAMBDA/$lambda/" | sed "s/LASSO_PATH/$lasso_path/"  | sed "s/LASSO_MIXTURE/$lasso_mixture/" > $xml_file
-  ln -fs ../bin/analyzer lasso2
-  mpiexec -np $processors  ./lasso2 $analysis_name  </dev/null  2>&1
+  mpiexec -np $processors ../analyzer $analysis_name  </dev/null  2>&1
   mv debug_master 'debug_master.'$lasso_mixture
 done
