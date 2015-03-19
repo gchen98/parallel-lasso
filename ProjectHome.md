@@ -1,0 +1,1 @@
+We have implemented routines for solving LASSO regression that scale over multiple hosts (using MPI), where each node fits a sub-problem on a GPU.  GPU Code is implemented in OpenCL.
